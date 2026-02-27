@@ -49,3 +49,15 @@ mini-app/
 ├── infra/                  # Docker
 └── docs/                   # Документация API
 
+
+# Обновить код
+git checkout develop
+git pull origin develop
+git checkout -b feature/твоя-задача
+
+# Коммит
+git add .
+git commit -m "feat: добавлена модель Theme"
+git push -u origin feature/твоя-задача
+
+# PR в develop
