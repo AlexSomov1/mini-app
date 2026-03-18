@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi import APIRouter
 
 """
 🎯 ГЛАВНЫЙ ФАЙЛ FASTAPI ПРИЛОЖЕНИЯ
@@ -9,10 +10,9 @@ from fastapi.middleware.cors import CORSMiddleware
 ✅ Backend A,B,C,D: подключайте роутеры здесь!
 
 📋 TODO Неделя 2 (обязательно):
-1. app.include_router(users.router, prefix="/users", tags=["users"])
-2. app.include_router(themes.router, prefix="/themes", tags=["themes"])
+
 3. app.include_router(requests.router, prefix="/requests", tags=["requests"])
-4. app.include_router(admin.router, prefix="/admin", tags=["admin"])
+
 5. CORSMiddleware для localhost:5173 (React dev)
 6. lifespan=create_all_tables() on startup
 
@@ -46,13 +46,15 @@ app.include_router(users.router, prefix="/users", tags=["users"])
 Frontend вызовет: axios.get("http://localhost:8000/users/me")
 ← вернёт UserPublic из Telegram initData
 """
-
-
 app = FastAPI(
     title="PolyMeeting MiniApp API",
     description="API для Telegram Mini App",
     version="0.1.0"
 )
+
+from app.api import requests
+"""Change to /api/v1"""
+app.include_router(requests.router, prefix="/api/v1", tags=["requests"])
 
 app.add_middleware(
     CORSMiddleware,
@@ -61,7 +63,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
 @app.get("/")
 async def root():
     return {"message": "PolyMeeting API работает! 🚀"}
