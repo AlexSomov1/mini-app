@@ -3,7 +3,8 @@
 ==================================================
 Чтение .env → pydantic объекты
 
-✅ Backend A (Неделя 2):
+📋 ПЕРЕМЕННЫЕ .env:
+"""
 from pydantic_settings import BaseSettings
 from typing import List
 
@@ -15,13 +16,7 @@ class Settings(BaseSettings):
     
     class Config:
         env_file = ".env"
+        extra = "ignore"
 
 settings = Settings()
-print(settings.database_url)  # → engine
-
-📋 ПЕРЕМЕННЫЕ .env:
-DATABASE_URL=sqlite+aiosqlite:///./app.db
-BOT_TOKEN=777000:AAExxx_your_token_here
-ADMIN_IDS=123456789,987654321
-SECRET_KEY=super-secret-change-in-production
-"""
+print(settings.database_url)

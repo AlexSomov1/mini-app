@@ -9,11 +9,19 @@ declare global {
   }
 }
 
+interface TelegramUser {
+  id: number;
+  first_name: string;
+  last_name?: string;
+  username?: string;
+}
+
 interface TelegramWebApp {
   backgroundColor: string;
   textColor: string;
   buttonColor: string;
   buttonTextColor: string;
+  initDataUnsafe: { user?: TelegramUser };
   ready: () => void;
   expand: () => void;
   onEvent: (event: string, callback: () => void) => void;
@@ -21,6 +29,8 @@ interface TelegramWebApp {
   showAlert: (message: string) => void;
   sendData: (data: string) => void;
 }
+
+const BACKEND_URL = 'https://f408bea7e74bb7.lhr.life';
 
 function App() {
   useEffect(() => {
@@ -36,6 +46,21 @@ function App() {
     updateTheme();
 
     tg.onEvent('themeChanged', updateTheme);
+
+    // АВТОРЕГИСТРАЦИЯ ПОЛЬЗОВАТЕЛЯ ПРИ ЗАПУСКЕ ПРИЛОЖЕНИЯ
+    const user = tg.initDataUnsafe?.user;
+    if (user) {
+      fetch(`${BACKEND_URL}/api/v1/users/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tg_id: user.id,
+          username: user.username ?? null,
+          full_name: `${user.first_name} ${user.last_name ?? ''}`.trim(),
+        }),
+      });
+    }
+
     return () => tg.offEvent('themeChanged', updateTheme);
   }, []);
 
