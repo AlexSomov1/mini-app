@@ -30,3 +30,32 @@ async def test_get_or_create_user():
 - Проверить hash(init_data) == init_data["hash"]
 - Только trusted Telegram данные
 """
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
+from app.models.user import User
+
+async def get_or_create_user(db: AsyncSession, tg_id: int, username: str | None, full_name: str) -> User:
+    result = await db.execute(select(User).where(User.tg_id == tg_id))
+    user = result.scalar_one_or_none()
+
+    if not user:
+        user = User(tg_id=tg_id, username=username, full_name=full_name)
+        db.add(user)
+        await db.commit()
+        await db.refresh(user)
+    return user
+
+async def get_user_by_tg_id(db: AsyncSession, tg_id: int) -> User | None:
+    result = await db.execute(select(User).where(User.tg_id == tg_id))
+    return result.scalar_one_or_none()
+
+async def ban_user(db: AsyncSession, user_id: int, ban: bool) -> bool:
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+
+    if not user:
+        return False
+
+    user.is_banned = ban
+    await db.commit()
+    return True

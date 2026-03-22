@@ -22,40 +22,6 @@
 3. __repr__() для debug: User(tg_id=123)
 4. relationship: themes=[], requests=[]
 
-🔧 ПРИМЕР КОДА (готовый шаблон):
-from sqlalchemy import Column, Integer, String, Boolean, DateTime
-from sqlalchemy.orm import relationship
-from sqlalchemy.sql import func
-from pydantic import BaseModel
-from typing import Optional
-
-class User(Base):
-    __tablename__ = "users"
-    id = Column(Integer, primary_key=True)
-    tg_id = Column(Integer, unique=True, index=True, nullable=False)
-    username = Column(String(32), unique=True, index=True)
-    full_name = Column(String(255))
-    is_banned = Column(Boolean, default=False)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    
-    # Связи (неделя 3)
-    # themes = relationship("Theme", back_populates="creator")
-    # requests = relationship("Request", back_populates="user")
-
-class UserCreate(BaseModel):
-    tg_id: int
-    username: Optional[str] = None
-    full_name: str
-
-class UserPublic(BaseModel):
-    id: int
-    tg_id: int  
-    username: Optional[str]
-    full_name: str
-    is_banned: bool
-    class Config:
-        from_attributes = True  # SQLAlchemy → JSON
-
 🧪 ТЕСТИРОВАНИЕ (Backend A):
 1. python -c "from app.models.user import User; print('✅ OK')"
 2. Base.metadata.create_all() → таблица users
@@ -67,3 +33,18 @@ async def get_me(init_ str, db: AsyncSession = Depends(get_db)):
     user = await users_service.get_or_create_user(db, init_data)
     return UserPublic.from_orm(user)
 """
+
+from sqlalchemy import Column, Integer, String, Boolean, DateTime
+from sqlalchemy.orm import relationship
+from sqlalchemy.sql import func
+from app.core.db import Base
+
+class User(Base):
+    __tablename__ = "users"
+    id = Column(Integer, primary_key=True)
+    tg_id = Column(Integer, unique=True, index=True, nullable=False)
+    username = Column(String(32), unique=True, index=True)
+    full_name = Column(String(255))
+    is_banned = Column(Boolean, default=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
