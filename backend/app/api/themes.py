@@ -44,6 +44,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from ..core.db import AsyncSessionLocal
 from ..schemas.theme import ThemeCreate
 from ..services.themes_service import create_theme, get_theme, get_themes, delete_theme
+from app.api.users import get_me
 
 router = APIRouter(prefix="/api/v1/themes", tags=["themes"])
 
@@ -60,7 +61,7 @@ async def get_current_user(db: AsyncSession) -> User:
             username="test",
             full_name="test",
             is_banned=False,
-            is_admin=False
+            is_admin=True
         )
         db.add(user)
         await db.commit()
@@ -69,31 +70,31 @@ async def get_current_user(db: AsyncSession) -> User:
     return user
 
 @router.get("/", summary="Получить список всех тем")
-async def getAllThemes():
+async def get_all_themes():
   async with AsyncSessionLocal() as session:
     result = await get_themes(session)
 
     return result
 
 @router.get("/{id}", summary = "Получить детали темы по id")
-async def getThemeData(theme_id: int):
+async def get_theme_data(theme_id: int):
   async with AsyncSessionLocal() as session:
     result = await get_theme(session, theme_id)
 
   return result
 
 @router.post("/themes", summary = "Опубликовать тему")
-async def createTheme(themeToCreate: ThemeCreate):
+async def create_theme(themeToCreate: ThemeCreate):
   async with AsyncSessionLocal() as session:
-    user = await get_current_user(session)
+    user = await get_me(session)
     result = await create_theme(session, user, themeToCreate)
 
   return result
 
 @router.delete("/themes/{id}", summary = "Удалить тему")
-async def deleteTheme(theme_id: int):
+async def delete_theme(theme_id: int):
   async with AsyncSessionLocal() as session:
-    user = await get_current_user(session)
+    user = await get_me(session)
     await delete_theme(session, theme_id, user)
 
   return "deleted"

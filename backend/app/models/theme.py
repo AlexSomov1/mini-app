@@ -54,4 +54,4 @@ class Theme(Base):
     max_slots = Column(Integer, nullable=True)
 
     creator = relationship("User")
-    #requests = relationship("Request", back_populates = "theme")
+    requests = relationship("Request", back_populates = "theme")

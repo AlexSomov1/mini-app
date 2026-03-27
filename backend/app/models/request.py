@@ -42,7 +42,7 @@ class Request(Base):
     __tablename__ = "requests"
 
     id = Column(Integer, autoincrement=True, primary_key=True)
-    theme_id = Column(Integer, nullable=False)
+    theme_id = Column(Integer, ForeignKey("theme.id"), nullable=False)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     status = Column(Enum(RequestStatus), default=RequestStatus.pending)
     created_at = Column(DateTime, default=datetime.utcnow)

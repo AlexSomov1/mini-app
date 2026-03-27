@@ -77,11 +77,14 @@ app.add_middleware(
 )
 
 from app.api import users
+from app.api import themes
 from app.api import requests
 
 app.include_router(users.router)
 
 app.include_router(requests.router)
+
+app.include_router(themes.router)
 
 @app.get("/")
 async def root():

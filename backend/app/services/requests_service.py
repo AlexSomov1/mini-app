@@ -27,8 +27,10 @@ async def moderate_request(db, request_id: int, status: str):
 from app.models.request import Request
 from app.models.user import User
 from app.schemas.request import RequestStatus
-from sqlalchemy import select
+from sqlalchemy import select, func
 from fastapi import HTTPException
+from app.models.theme import Theme
+
 
 async def exists(db, theme_id: int, user_id: int) -> bool:
     result = await db.execute(
@@ -39,10 +41,22 @@ async def exists(db, theme_id: int, user_id: int) -> bool:
     return result.scalar() is not None
 
 async def create_request(db, theme_id: int, user_id: int) -> Request:
-    if await exists(db, theme_id, user_id): raise HTTPException(status_code=409, detail="request already exists")
+    if await exists(db, theme_id, user_id):
+        raise HTTPException(status_code=409, detail="request already exists")
 
-    #TODO: Добавить проверку лимита темы
-    #if theme.request_count >= 30: raise HTTPException(status_code=400, detail="theme is full")
+    if Theme is None:
+        raise HTTPException(status_code=400, detail="theme is full")
+
+    if Theme.max_slots is not None:
+        count_result = await db.execute(
+            select(func.count()).where(
+                Request.theme_id == theme_id,
+                Request.status == RequestStatus.approved
+            )
+        )
+        count = count_result.scalar()
+        if count >= Theme.max_slots:
+            raise HTTPException(status_code=400, detail="theme is full")
 
     request = Request(theme_id=theme_id, user_id=user_id, status="pending")
     db.add(request)
