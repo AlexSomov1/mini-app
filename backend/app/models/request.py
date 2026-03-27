@@ -49,6 +49,6 @@ class Request(Base):
 
     __table_args__ = (UniqueConstraint("theme_id", "user_id"),)
 
-    #theme = relationship("Theme")
-    #user = relationship("User")
+    theme = relationship("Theme")
+    user = relationship("User")
 
