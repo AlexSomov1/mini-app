@@ -42,7 +42,7 @@ from app.core.db import Base
 class User(Base):
     __tablename__ = "users"
     id = Column(Integer, primary_key=True)
-    tg_id = Column(Integer, unique=True, index=True, nullable=True)
+    tg_id = Column(Integer, unique=True, index=True, nullable=False)
     username = Column(String(32), unique=True, index=True)
     full_name = Column(String(255))
     is_banned = Column(Boolean, default=False)
