@@ -36,3 +36,7 @@ build/
 ._*
 Thumbs.db
 ehthumbs.db
+backend/.venv/
+
+# Database
+*.db
