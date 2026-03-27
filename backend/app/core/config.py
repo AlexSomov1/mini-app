@@ -10,7 +10,7 @@ from typing import List
 
 class Settings(BaseSettings):
     database_url: str = "sqlite+aiosqlite:///./app.db"
-    bot_token: str
+    bot_token: str = ""
     admin_ids: List[int] = []
     secret_key: str = "CHANGE_ME"
     

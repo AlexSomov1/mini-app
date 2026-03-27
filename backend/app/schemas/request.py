@@ -11,13 +11,17 @@
 | RequestModerate | PATCH approve | status |
 
 ⏳ TODO Backend C:
-```python
+"""
+from datetime import datetime
 from enum import Enum
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+
+from app.schemas.user import UserPublic
+
 
 class RequestStatus(str, Enum):
     pending = "pending"
-    approved = "approved" 
+    approved = "approved"
     rejected = "rejected"
 
 class RequestCreate(BaseModel):
@@ -25,19 +29,14 @@ class RequestCreate(BaseModel):
 
 class RequestPublic(BaseModel):
     id: int
-    theme_id: int
-    user: UserPublic
     status: RequestStatus
+    theme_id: int
+    user : UserPublic
+
     created_at: datetime
-    
+
     class Config:
         from_attributes = True
 
 class RequestModerate(BaseModel):
     status: RequestStatus
-
-class RequestsListResponse(BaseModel):
-    requests: list[RequestPublic]
-    total_pending: int
-    total_approved: int
-"""

@@ -32,49 +32,24 @@ PATCH /api/v1/themes/1/requests/5
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.db import get_db
+from app.schemas.request import RequestCreate, RequestPublic, RequestModerate
+from app.services import requests_service
+
 router = APIRouter(prefix="/themes/{theme_id}/requests",
                    tags=["requests"])
 
-fake_db = [
-    {"user_id": 1, "theme_id": 1}, ]
-request_id_seq = 1
-
-"""1 endpoint: CREATE REQUEST with fake db"""
-@router.post("")
-async def create_request(theme_id: int, user_id: int):
-    global request_id_seq
-    for r in fake_db:
-        if r["user_id"] == user_id and r["theme_id"] == theme_id:
-            raise HTTPException(
-                status_code=400,
-                detail="already exist"
-            )
-    request = {
-        "id" : request_id_seq,
-        "user_id" : user_id,
-        "theme_id": theme_id,
-        "status" : "pending"
-    }
-    request_id_seq += 1
-    fake_db.append(request)
+@router.post("", response_model=RequestPublic)
+async def create_request_endpoint(theme_id: int, user_id: int, db: AsyncSession = Depends(get_db)):
+    request = await requests_service.create_request(db, theme_id, user_id)
     return request
 
-"""2 endpoint: GET REQUESTS with fake db"""
-@router.get("")
-async def get_request(theme_id: int):
-    result = [r for r in fake_db if r["theme_id"] == theme_id]
-    if result == []:
-        return {"not found request"}
-    return result
+@router.get("", response_model=list[RequestPublic])
+async def get_request_endpoint(theme_id: int, db: AsyncSession = Depends(get_db)):
+    request = await requests_service.get_requests_for_theme(db, theme_id)
+    return request
 
-"""3 endpoint: GET REQUESTS with fake db"""
-@router.patch("/{id}")
-async def patch_request(theme_id: int, request_id: int, status: str):
-    if status not in ["approved", "rejected"]:
-        raise HTTPException(status_code=400, detail="invalid status")
-    for r in fake_db:
-        if r["id"] == request_id and r["theme_id"] == theme_id:
-            r["status"] = status
-            return r
-    raise HTTPException(status_code=400, detail="request not found")
-"""TODO ADD NOTIFY USERS"""
+@router.patch("/{id}", response_model=RequestPublic)
+async def patch_request(request_id: int, data: RequestModerate, db: AsyncSession = Depends(get_db)):
+    request = await requests_service.moderate_request(db, request_id, data.status)
+    return request

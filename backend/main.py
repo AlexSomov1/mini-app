@@ -52,6 +52,8 @@ from contextlib import asynccontextmanager
 from app.core.db import engine, Base
 
 import app.models.user
+import app.models.request
+import app.models.theme
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -75,8 +77,11 @@ app.add_middleware(
 )
 
 from app.api import users
+from app.api import requests
 
 app.include_router(users.router)
+
+app.include_router(requests.router)
 
 @app.get("/")
 async def root():
