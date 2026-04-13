@@ -1,6 +1,3 @@
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-
 """
 🎯 ГЛАВНЫЙ ФАЙЛ FASTAPI ПРИЛОЖЕНИЯ
 ==================================================
@@ -47,20 +44,47 @@ Frontend вызовет: axios.get("http://localhost:8000/users/me")
 ← вернёт UserPublic из Telegram initData
 """
 
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+
+from contextlib import asynccontextmanager
+
+from app.core.db import engine, Base
+
+import app.models.user
+import app.models.request
+import app.models.theme
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    yield
 
 app = FastAPI(
     title="PolyMeeting MiniApp API",
     description="API для Telegram Mini App",
-    version="0.1.0"
+    version="0.1.0",
+    lifespan=lifespan
 )
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],  # Vite dev server
+    allow_origins=["http://localhost:5173", "https://tendrilly-chantay-inceptively.ngrok-free.dev", "https://f408bea7e74bb7.lhr.life"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+from app.api import users
+from app.api import themes
+from app.api import requests
+
+app.include_router(users.router)
+
+app.include_router(requests.router)
+
+app.include_router(themes.router)
 
 @app.get("/")
 async def root():

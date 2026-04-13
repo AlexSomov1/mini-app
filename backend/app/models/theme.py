@@ -33,3 +33,25 @@
 POST /themes {"title":"Матан", "datetime":"2026-03-15T19:00"}
 ← Backend B проверит: current_user.is_banned == False
 """
+
+from sqlalchemy.orm import DeclarativeBase, relationship
+from sqlalchemy import create_engine, Column, Integer, String, DateTime, Text
+from sqlalchemy import ForeignKey
+from pydantic import BaseModel
+from datetime import datetime
+from typing import Optional, List
+from app.core.db import Base
+
+class Theme(Base):
+    __tablename__ = "theme"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    title = Column(String(255), nullable=False)
+    description = Column(Text, nullable=True)
+    datetime = Column(DateTime, nullable=False, index = True)
+    location = Column(String(255), nullable=False)
+    creator_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    max_slots = Column(Integer, nullable=True)
+
+    creator = relationship("User")
+    requests = relationship("Request", back_populates = "theme")

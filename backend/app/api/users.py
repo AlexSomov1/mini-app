@@ -36,3 +36,36 @@ const user = response.data; // UserPublic
 - 409: user with tg_id already exists  
 - 401: banned user
 """
+from fastapi import HTTPException, Depends, APIRouter
+from sqlalchemy.ext.asyncio import AsyncSession
+from app.core.db import get_db
+from app.schemas.user import UserCreate, UserPublic
+from app.services import users_service
+
+router = APIRouter(prefix="/api/v1/users", tags=["users"])
+
+@router.get("/me", response_model=UserPublic)
+async def get_me(tg_id: int, db: AsyncSession = Depends(get_db)):
+    user = await users_service.get_user_by_tg_id(db=db, tg_id=tg_id)
+
+    if not user:
+        raise HTTPException(status_code=404, detail="Пользователь не найден")
+
+    if user.is_banned:
+        raise HTTPException(status_code=403, detail="Юзер забанен")
+
+    return user
+
+
+@router.post("/", response_model=UserPublic)
+async def create_user(data: UserCreate, db: AsyncSession = Depends(get_db)):
+    user = await users_service.get_or_create_user(
+        db=db, tg_id=data.tg_id, username=data.username, full_name=data.full_name
+    )
+
+    if user.is_banned:
+        raise HTTPException(status_code=403, detail="Юзер забанен")
+
+    return user
+
+

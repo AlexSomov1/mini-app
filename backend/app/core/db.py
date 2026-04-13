@@ -4,22 +4,18 @@
 Подключение БД + dependency для роутеров
 
 🎯 ЦЕЛЬ: AsyncSession в каждом эндпоинте
+"""
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
+from sqlalchemy.orm import DeclarativeBase
+from app.core.config import settings
 
-⏳ TODO Backend A (завтра!):
-1. from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
-2. engine = create_async_engine(settings.database_url, echo=True)
-3. AsyncSessionLocal = sessionmaker(engine, expire_on_commit=False)
+class Base(DeclarativeBase):
+    pass
 
-4. @asynccontextmanager
-async def get_db(request: Request):
+engine = create_async_engine(settings.database_url, echo=True)
+
+AsyncSessionLocal = async_sessionmaker(engine, expire_on_commit=False)
+
+async def get_db():
     async with AsyncSessionLocal() as session:
         yield session
-
-5. lifespan app startup → Base.metadata.create_all()
-
-🧪 ТЕСТ:
-async def test_db():
-    async with get_db() as db:
-        result = await db.execute(select(1))
-        assert result.scalar() == 1
-"""
