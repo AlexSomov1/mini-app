@@ -11,14 +11,14 @@
 |------|-----|----------|---------|
 | id | Integer PK | Автоинкремент | Все |
 | tg_id | Integer unique | Telegram ID (уник!) | Backend A |
-| username | String(32) | @username опционально | Backend A |  
+| username | String(32) | @username опционально | Backend A |
 | full_name | String(255) | Имя Фамилия | Backend A |
 | is_banned | Boolean | Бан куратором | Backend D |
 | created_at | DateTime | Регистрация | Backend A |
 
 ⏳ TODO Неделя 2 (Backend A):
 1. SQLAlchemy модель с таблицей "users"
-2. Pydantic схемы: UserCreate, UserPublic 
+2. Pydantic схемы: UserCreate, UserPublic
 3. __repr__() для debug: User(tg_id=123)
 4. relationship: themes=[], requests=[]
 
@@ -47,4 +47,5 @@ class User(Base):
     full_name = Column(String(255))
     is_banned = Column(Boolean, default=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+    is_admin = Column(Boolean, default=False)
 
