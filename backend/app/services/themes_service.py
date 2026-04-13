@@ -42,7 +42,7 @@ async def create_theme(db: AsyncSession, creator: User, theme_: ThemeCreate) -> 
         raise HTTPException(status_code = 400, detail = "Некорректная дата встречи")
 
     theme = Theme(title = theme_.title, description = theme_.description, datetime = theme_.datetime, location = theme_.location,
-                 creator_id = creator.id)
+                 creator_id = creator.id, max_slots = theme_.max_slots)
 
     db.add(theme)
     await db.commit()
