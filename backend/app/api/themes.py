@@ -84,17 +84,17 @@ async def get_theme_data(theme_id: int):
   return result
 
 @router.post("/themes", summary = "Опубликовать тему")
-async def create_theme(themeToCreate: ThemeCreate):
+async def create_theme_api(themeToCreate: ThemeCreate):
   async with AsyncSessionLocal() as session:
-    user = await get_me(session)
+    user = await get_current_user(session)
     result = await create_theme(session, user, themeToCreate)
 
   return result
 
 @router.delete("/themes/{id}", summary = "Удалить тему")
-async def delete_theme(theme_id: int):
+async def delete_theme_api(theme_id: int):
   async with AsyncSessionLocal() as session:
-    user = await get_me(session)
+    user = await get_current_user(session)
     await delete_theme(session, theme_id, user)
 
   return "deleted"

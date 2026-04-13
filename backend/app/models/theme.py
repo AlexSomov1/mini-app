@@ -51,7 +51,7 @@ class Theme(Base):
     datetime = Column(DateTime, nullable=False, index = True)
     location = Column(String(255), nullable=False)
     creator_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    max_slots = Column(Integer, nullable=True)
+    max_slots = Column(Integer, nullable=False)
 
     creator = relationship("User")
     requests = relationship("Request", back_populates = "theme")
