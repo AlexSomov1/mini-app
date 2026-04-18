@@ -499,15 +499,16 @@ from sqlalchemy import select
 from ..models.theme import Theme
 from ..models.user import User
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
-from ..core.db import AsyncSessionLocal
+from ..core.db import AsyncSessionLocal, get_db
 from ..schemas.theme import ThemeCreate
 from ..services.themes_service import create_theme, get_theme, get_themes, delete_theme
 from app.api.users import get_me
+from fastapi import Depends
 
 router = APIRouter(prefix="/api/v1/themes", tags=["themes"])
 
 #получение текущего пользователя (пока что заглушка)
-async def get_current_user(db: AsyncSession) -> User:
+async def get_current_user(db: AsyncSession = Depends(get_db)) -> User:
     result = await db.execute(
         select(User).where(User.tg_id == 12377331)
     )

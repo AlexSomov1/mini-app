@@ -286,25 +286,55 @@ api/requests.py готов когда:
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-
+from sqlalchemy import select
 from app.core.db import get_db
 from app.schemas.request import RequestCreate, RequestPublic, RequestModerate
 from app.services import requests_service
 
-router = APIRouter(prefix="/themes/{theme_id}/requests",
-                   tags=["requests"])
+from app.models.user import User
 
-@router.post("", response_model=RequestPublic)
-async def create_request_endpoint(theme_id: int, user_id: int, db: AsyncSession = Depends(get_db)):
-    request = await requests_service.create_request(db, theme_id, user_id)
+from app.api.themes import get_current_user
+
+router = APIRouter(
+    prefix="/api/v1/themes", tags=["requests"]
+)
+
+@router.post("/{theme_id}/requests/", response_model=RequestPublic, status_code=201, summary="Создать заявку на тему")
+async def create_request(
+    theme_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    request = await requests_service.create_request(db, theme_id, current_user)
     return request
 
-@router.get("", response_model=list[RequestPublic])
-async def get_request_endpoint(theme_id: int, db: AsyncSession = Depends(get_db)):
-    request = await requests_service.get_requests_for_theme(db, theme_id)
+@router.get("/{theme_id}/my-request", response_model=RequestPublic, summary="Мои заявки")
+async def get_my_request(
+    theme_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    request = await requests_service.get_user_request_for_theme(db, theme_id, current_user.id)
+    if request is None:
+        raise HTTPException(status_code=404, detail="Request not found")
     return request
 
-@router.patch("/{id}", response_model=RequestPublic)
-async def patch_request(request_id: int, data: RequestModerate, db: AsyncSession = Depends(get_db)):
-    request = await requests_service.moderate_request(db, request_id, data.status)
+@router.patch("/{theme_id}/requests/{request_id}", response_model=RequestPublic, summary="Модерировать заявку")
+async def patch_request(
+    theme_id: int,
+    request_id: int,
+    data: RequestModerate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    request = await requests_service.moderate_request(db, request_id, data.status, current_user)
     return request
+
+@router.get("/{theme_id}/requests/", response_model=list[RequestPublic], summary="Список заявок")
+async def get_requests(
+    theme_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return await requests_service.get_requests_for_theme(db, theme_id, current_user)
+

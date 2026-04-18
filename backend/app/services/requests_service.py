@@ -349,60 +349,176 @@ Requests service — самая сложная часть бизнес-логи�
 Правильный поток:
 Frontend → API (валидация схем) → Service (бизнес-правила) → DB (данные)
 """
+from typing import Dict, List, Optional
+
+from sqlalchemy import select, func
+from sqlalchemy.orm import selectinload
+from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi import HTTPException
+from datetime import datetime
 
 from app.models.request import Request
 from app.models.user import User
-from app.schemas.request import RequestStatus
-from sqlalchemy import select, func
-from fastapi import HTTPException
 from app.models.theme import Theme
+from app.schemas.request import RequestStatus
+from app.services.themes_service import get_theme
 
 
-async def exists(db, theme_id: int, user_id: int) -> bool:
-    result = await db.execute(
-        select(Request).where(
+async def create_request(db: AsyncSession, theme_id: int, user: User) -> Request:
+    try:
+        if user.is_banned:
+            raise HTTPException(status_code=403, detail="User is banned")
+
+        theme = await get_theme(db, theme_id)
+
+        if theme.datetime <= datetime.now():
+            raise HTTPException(status_code=400, detail="Theme has already passed")
+
+        duplicate_stmt = select(Request).where(
             Request.theme_id == theme_id,
-            Request.user_id == user_id)
-    )
-    return result.scalar() is not None
-
-async def create_request(db, theme_id: int, user_id: int) -> Request:
-    if await exists(db, theme_id, user_id):
-        raise HTTPException(status_code=409, detail="request already exists")
-
-    if Theme is None:
-        raise HTTPException(status_code=400, detail="theme is full")
-
-    if Theme.max_slots is not None:
-        count_result = await db.execute(
-            select(func.count()).where(
-                Request.theme_id == theme_id,
-                Request.status == RequestStatus.approved
-            )
+            Request.user_id == user.id
         )
-        count = count_result.scalar()
-        if count >= Theme.max_slots:
-            raise HTTPException(status_code=400, detail="theme is full")
+        existing = (await db.execute(duplicate_stmt)).scalar_one_or_none()
+        if existing:
+            raise HTTPException(status_code=409, detail="Request already exists")
 
-    request = Request(theme_id=theme_id, user_id=user_id, status="pending")
-    db.add(request)
-    await db.commit()
-    return request
+        slots_stmt = select(func.count()).where(
+            Request.theme_id == theme_id,
+            Request.status == RequestStatus.approved
+        )
+        approved_count = (await db.execute(slots_stmt)).scalar()
+        if approved_count >= theme.max_slots:
+            raise HTTPException(status_code=400, detail="Theme is full")
 
-async def moderate_request(db, request_id: int, status: RequestStatus) -> Request:
-    request = await db.get(Request, request_id)
-    if request is None: raise HTTPException(status_code=404, detail="request not found")
-    request.status = status
-    # TODO: Добавить оповещение пользователей
-    #if status == "approved":
-        #await bots.notify_user(request.user.tg_id, "Вас приняли!")
+        request = Request(
+            theme_id=theme_id,
+            user_id=user.id,
+            status=RequestStatus.pending
+        )
+        db.add(request)
+        await db.commit()
 
-    await db.commit()
-    await db.refresh(request)
-    return request
+        # Перезагружаем с явным selectinload — иначе lazy loading упадёт в async
+        stmt = select(Request).where(Request.id == request.id).options(
+            selectinload(Request.user)
+        )
+        result = await db.execute(stmt)
+        return result.scalar_one()
 
-async def get_requests_for_theme(db, theme_id: int):
-    result = await db.execute(
-        select(Request).where(Request.theme_id == theme_id)
+    except HTTPException:
+        await db.rollback()
+        raise
+    except Exception:
+        await db.rollback()
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+async def count_requests_by_status(db: AsyncSession, theme_id: int) -> Dict[str, int]:
+    stmt = (
+        select(Request.status, func.count())
+        .where(Request.theme_id == theme_id)
+        .group_by(Request.status)
     )
+    rows = (await db.execute(stmt)).all()
+    counts = {status: count for status, count in rows}
+    pending = counts.get(RequestStatus.pending, 0)
+    approved = counts.get(RequestStatus.approved, 0)
+    rejected = counts.get(RequestStatus.rejected, 0)
+    return {
+        "pending": pending,
+        "approved": approved,
+        "rejected": rejected,
+        "total": pending + approved + rejected,
+    }
+
+async def get_theme_requests_stats(db: AsyncSession, theme_id: int, max_slots: int = 30) -> Dict:
+    counts = await count_requests_by_status(db, theme_id)
+    approved = counts["approved"]
+    rejected = counts["rejected"]
+    total = counts["total"]
+
+    slots_available = max_slots - approved
+    is_full = slots_available <= 0
+    return {
+        "approved_count": approved,
+        "rejected_count": rejected,
+        "total_requests": total,
+        "slots_available": slots_available,
+        "is_full": is_full,
+        "can_accept_more" : not is_full,
+    }
+
+async def can_moderate_request(db: AsyncSession, request_id: int, moderator: User) -> bool:
+    stmt = select(Request).where(Request.id == request_id).options(
+        selectinload(Request.theme)
+    )
+    request = (await db.execute(stmt)).scalar_one_or_none()
+    if request is None:
+        return False
+
+    is_creator = request.theme.creator_id == moderator.id
+    is_admin = moderator.is_admin
+
+    return is_creator or is_admin
+
+async def moderate_request(db: AsyncSession, request_id: int, new_status: RequestStatus, moderator: User ) -> Request:
+    try:
+        stmt = select(Request).where(Request.id == request_id).options(
+            selectinload(Request.user),
+            selectinload(Request.theme)
+        )
+        request = (await db.execute(stmt)).scalar_one_or_none()
+
+        if request is None:
+            raise HTTPException(status_code=404, detail="Request not found")
+
+        allowed = await can_moderate_request(db, request_id, moderator)
+        if not allowed:
+            raise HTTPException(status_code=403, detail="Not authorized to moderate")
+
+        request.status = new_status
+        await db.commit()
+    # TODO: Отправить уведомление юзеру о модерации заявки
+        # if new_status != RequestStatus.pending:
+        #     accepted = new_status == RequestStatus.approved
+        #     message = f"Ваша заявка {'принята' if accepted else 'отклонена'}"
+        #     await notify_user(request.user.tg_id, message, theme_title=request.theme.title)
+
+        return request
+    except HTTPException:
+        await db.rollback()
+        raise
+    except Exception:
+        await db.rollback()
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+async def get_requests_for_theme(db: AsyncSession, theme_id: int, moderator: User) -> List[Request]:
+    theme = await get_theme(db, theme_id)
+
+    if theme.creator_id != moderator.id and not moderator.is_admin:
+        raise HTTPException(status_code=403, detail="Not authorized to view requests")
+
+    stmt = (
+        select(Request)
+        .where(Request.theme_id == theme_id)
+        .options(
+            selectinload(Request.user),
+            selectinload(Request.theme)
+        )
+        .order_by(Request.created_at.desc())
+    )
+    result = await db.execute(stmt)
     return result.scalars().all()
+
+async def get_user_request_for_theme(db: AsyncSession, theme_id: int, user_id: int) -> Optional[Request]:
+    stmt = (
+        select(Request)
+        .where(
+            Request.theme_id == theme_id,
+            Request.user_id == user_id
+        )
+        .options(
+            selectinload(Request.user),
+        )
+    )
+    result = await db.execute(stmt)
+    return result.scalar_one_or_none()
