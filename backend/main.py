@@ -70,7 +70,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "https://tendrilly-chantay-inceptively.ngrok-free.dev", "https://f408bea7e74bb7.lhr.life"],
+    allow_origins=["http://localhost:5173", "http://127.0.0.1:3000/", "tps://tendrilly-chantay-inceptively.ngrok-free.dev", "https://f408bea7e74bb7.lhr.life"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

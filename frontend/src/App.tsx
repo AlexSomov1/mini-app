@@ -581,12 +581,12 @@ function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
     const desc = prefix ? `${prefix}\n${form.description}`.trim() : form.description.trim();
     const payload = {
       title: form.title.trim(), description: desc || undefined,
-      datetime: new Date(form.datetime).toISOString(),
+      datetime: new Date(form.datetime).toISOString().replace(/\.\d{3}Z$/, 'Z'),
       location: form.location.trim(), max_slots: form.max_slots,
     };
     setLoading(true); setError('');
     try {
-      const res = await fetch(`${API_BASE}/themes/`, { method: 'POST', headers: authHeaders(), body: JSON.stringify(payload) });
+      const res = await fetch(`${API_BASE}/themes/themes`, { method: 'POST', headers: authHeaders(), body: JSON.stringify(payload) });
       if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.detail ?? `Ошибка ${res.status}`); }
       const created: Theme = await res.json();
       created.tags = form.tags; created.slots_available = created.max_slots; created.requests_count = 0;
