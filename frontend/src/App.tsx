@@ -8,8 +8,7 @@ import {
 import PolyLogo from '../assets/images/logo.png';
 
 // ─── Конфигурация ─────────────────────────────────────────────────────────────
-// Меняй BACKEND_URL когда запускаешь localhost.run / ngrok
-const BACKEND_URL = 'http://localhost:8000';
+const BACKEND_URL = '';
 const API_BASE = `${BACKEND_URL}/api/v1`;
 
 // ─── Типы ─────────────────────────────────────────────────────────────────────
@@ -248,6 +247,22 @@ interface DetailModalProps {
   onRequestChanged: (themeId: number, action: 'join' | 'cancel') => void;
 }
 function DetailModal({ theme, myRequests, currentUserId, onClose, onThemeDeleted, onRequestChanged }: DetailModalProps) {
+  if (!theme || !theme.creator) {
+  console.error('DetailModal: theme.creator отсутствует', theme);
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal">
+        <div className="modal-header">
+          <h2 className="modal-title">Ошибка</h2>
+          <button className="modal-close" onClick={onClose}><FiX size={20} /></button>
+        </div>
+        <div className="modal-body">
+          <p>Не удалось загрузить данные о мероприятии.</p>
+        </div>
+      </div>
+    </div>
+    );
+  }
   const tags = theme.tags ?? extractTags(theme.description);
   const count = requestsCount(theme);
   const avail = slotsAvail(theme);
@@ -255,7 +270,7 @@ function DetailModal({ theme, myRequests, currentUserId, onClose, onThemeDeleted
   const fillPct = Math.min(100, Math.round((count / theme.max_slots) * 100));
   const cleanDesc = theme.description?.replace(/^(#\S+\s*)+\n?/, '').trim() ?? '';
 
-  const isOwner = currentUserId !== null && theme.creator.tg_id === currentUserId;
+  const isOwner = currentUserId !== null && theme.creator && theme.creator.tg_id === currentUserId;
   const myReq = myRequests.find(r => r.theme.id === theme.id);
   const role: UserRole = isOwner ? 'owner'
     : myReq ? (myReq.status === 'pending' ? 'pending' : 'member') : 'none';
@@ -586,7 +601,7 @@ function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
     };
     setLoading(true); setError('');
     try {
-      const res = await fetch(`${API_BASE}/themes/themes`, { method: 'POST', headers: authHeaders(), body: JSON.stringify(payload) });
+      const res = await fetch(`${API_BASE}/themes`, { method: 'POST', headers: authHeaders(), body: JSON.stringify(payload) });
       if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.detail ?? `Ошибка ${res.status}`); }
       const created: Theme = await res.json();
       created.tags = form.tags; created.slots_available = created.max_slots; created.requests_count = 0;
@@ -720,7 +735,7 @@ function App() {
     });
   };
 
-  const myThemes = themes.filter(t => currentUserId !== null && t.creator.tg_id === currentUserId);
+  const myThemes = themes.filter(t => currentUserId !== null && t.creator && t.creator.tg_id === currentUserId);
 
   const filtered = themes.filter(t => {
     if (searchQuery) {
