@@ -601,7 +601,7 @@ function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
     };
     setLoading(true); setError('');
     try {
-      const res = await fetch(`${API_BASE}/themes`, { method: 'POST', headers: authHeaders(), body: JSON.stringify(payload) });
+      const res = await fetch(`${API_BASE}/themes/themes`, { method: 'POST', headers: authHeaders(), body: JSON.stringify(payload) });
       if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.detail ?? `Ошибка ${res.status}`); }
       const created: Theme = await res.json();
       created.tags = form.tags; created.slots_available = created.max_slots; created.requests_count = 0;
