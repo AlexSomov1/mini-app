@@ -387,7 +387,7 @@ async def create_request(db: AsyncSession, theme_id: int, user: User) -> Request
             Request.status == RequestStatus.approved
         )
         approved_count = (await db.execute(slots_stmt)).scalar()
-        if approved_count >= theme.max_slots:
+        if approved_count + 1 >= theme.max_slots:
             raise HTTPException(status_code=400, detail="Theme is full")
 
         request = Request(
@@ -503,6 +503,20 @@ async def get_requests_for_theme(db: AsyncSession, theme_id: int, moderator: Use
         .options(
             selectinload(Request.user),
             selectinload(Request.theme)
+        )
+        .order_by(Request.created_at.desc())
+    )
+    result = await db.execute(stmt)
+    return result.scalars().all()
+
+
+async def get_user_requests(db: AsyncSession, user_id: int) -> List[Request]:
+    stmt = (
+        select(Request)
+        .where(Request.user_id == user_id)
+        .options(
+            selectinload(Request.user),
+            selectinload(Request.theme).selectinload(Theme.creator),
         )
         .order_by(Request.created_at.desc())
     )

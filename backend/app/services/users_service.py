@@ -379,15 +379,35 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.models.user import User
 
-async def get_or_create_user(db: AsyncSession, tg_id: int, username: str | None, full_name: str) -> User:
+async def get_or_create_user(
+    db: AsyncSession,
+    tg_id: int,
+    username: str | None,
+    full_name: str | None,
+) -> User:
     result = await db.execute(select(User).where(User.tg_id == tg_id))
     user = result.scalar_one_or_none()
+    normalized_full_name = full_name or username or str(tg_id)
 
     if not user:
-        user = User(tg_id=tg_id, username=username, full_name=full_name)
+        user = User(tg_id=tg_id, username=username, full_name=normalized_full_name)
         db.add(user)
         await db.commit()
         await db.refresh(user)
+        return user
+
+    changed = False
+    if user.username != username:
+        user.username = username
+        changed = True
+    if user.full_name != normalized_full_name:
+        user.full_name = normalized_full_name
+        changed = True
+
+    if changed:
+        await db.commit()
+        await db.refresh(user)
+
     return user
 
 async def get_user_by_tg_id(db: AsyncSession, tg_id: int) -> User | None:

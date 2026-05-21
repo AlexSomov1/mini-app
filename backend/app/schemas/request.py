@@ -16,6 +16,7 @@ from datetime import datetime
 from enum import Enum
 from pydantic import BaseModel, Field
 
+from app.schemas.theme import ThemePublic
 from app.schemas.user import UserPublic
 
 
@@ -40,3 +41,7 @@ class RequestPublic(BaseModel):
 
 class RequestModerate(BaseModel):
     status: RequestStatus
+
+
+class RequestWithTheme(RequestPublic):
+    theme: ThemePublic

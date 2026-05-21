@@ -71,14 +71,17 @@ class ThemeCreate(BaseModel):
 class ThemePublic(BaseModel):
     id: int
     title: str
+    description: Optional[str] = None
     creator: UserPublic
     datetime: dt
     location: str
     max_slots: int
+    requests_count: int = 0
+    approved_count: int = 0
+    slots_available: int = 0
 
     model_config = ConfigDict(from_attributes=True)
 
 class ThemeListResponse(BaseModel):
     themes: list[ThemePublic]
     total_count: int
-

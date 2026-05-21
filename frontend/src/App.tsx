@@ -3,7 +3,7 @@ import './App.css';
 import {
   FiCalendar, FiFilter, FiPlusCircle, FiGrid, FiList,
   FiX, FiMapPin, FiUsers, FiClock, FiSearch,
-  FiTrash2, FiUserMinus, FiUserPlus, FiAlertTriangle, FiChevronRight
+  FiTrash2, FiUserMinus, FiUserPlus, FiAlertTriangle, FiChevronRight, FiCheck
 } from 'react-icons/fi';
 import PolyLogo from '../assets/images/logo.png';
 
@@ -24,7 +24,7 @@ interface Theme {
   id: number; title: string; description?: string;
   datetime: string; location: string; max_slots: number;
   creator: ThemeCreator; tags?: string[];
-  slots_available?: number; requests_count?: number;
+  slots_available?: number; requests_count?: number; approved_count?: number;
 }
 interface Participant {
   id: number;         // request id
@@ -79,11 +79,21 @@ function fmtDateFull(s: string) {
   });
 }
 function requestsCount(t: Theme): number {
-  return t.requests_count ?? (t.max_slots - (t.slots_available ?? t.max_slots));
+  if (t.requests_count !== undefined) return t.requests_count;
+  if (t.slots_available !== undefined) return t.max_slots - t.slots_available;
+  return 1;
 }
 function slotsAvail(t: Theme): number {
   if (t.slots_available !== undefined) return t.slots_available;
-  return t.max_slots - (t.requests_count ?? 0);
+  return Math.max(t.max_slots - requestsCount(t), 0);
+}
+function adjustThemeParticipantCount(theme: Theme, delta: number): Theme {
+  const nextCount = Math.max(requestsCount(theme) + delta, 1);
+  return {
+    ...theme,
+    requests_count: nextCount,
+    slots_available: Math.max(theme.max_slots - nextCount, 0),
+  };
 }
 function slotWord(n: number) {
   const m10 = n % 10, m100 = n % 100;
@@ -103,6 +113,14 @@ function authHeaders(): Record<string, string> {
   const tg = window.Telegram?.WebApp;
   if (tg?.initData) h['Authorization'] = `tma ${tg.initData}`;
   return h;
+}
+async function fetchJsonOrThrow(url: string, init?: RequestInit) {
+  const res = await fetch(url, init);
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.detail ?? `Ошибка ${res.status}`);
+  }
+  return res;
 }
 
 // ─── ConfirmDialog ────────────────────────────────────────────────────────────
@@ -135,8 +153,9 @@ interface ParticipantsPanelProps {
   themeId: number;
   isOwner: boolean;
   onKick: (requestId: number, userName: string) => void;
+  onParticipantCountChanged: (delta: number) => void;
 }
-function ParticipantsPanel({ themeId, isOwner, onKick }: ParticipantsPanelProps) {
+function ParticipantsPanel({ themeId, isOwner, onKick, onParticipantCountChanged }: ParticipantsPanelProps) {
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [loading, setLoading] = useState(true);
   const [confirm, setConfirm] = useState<{ id: number; name: string } | null>(null);
@@ -164,6 +183,7 @@ function ParticipantsPanel({ themeId, isOwner, onKick }: ParticipantsPanelProps)
 
   const handleKickConfirm = async () => {
     if (!confirm) return;
+    const removed = participants.find(p => p.id === confirm.id);
     try {
       await fetch(
         `${API_BASE}/themes/${themeId}/requests/${confirm.id}`,
@@ -171,8 +191,26 @@ function ParticipantsPanel({ themeId, isOwner, onKick }: ParticipantsPanelProps)
       );
     } catch { /* применяем локально */ }
     setParticipants(prev => prev.filter(p => p.id !== confirm.id));
+    if (removed?.status === 'approved') onParticipantCountChanged(-1);
     onKick(confirm.id, confirm.name);
     setConfirm(null);
+  };
+
+  const handleApprove = async (requestId: number) => {
+    try {
+      const res = await fetch(
+        `${API_BASE}/themes/${themeId}/requests/${requestId}`,
+        { method: 'PATCH', headers: authHeaders(), body: JSON.stringify({ status: 'approved' }) }
+      );
+      if (!res.ok) throw new Error();
+    } catch {
+      // Если API временно не ответил, всё равно обновляем локально: после перезагрузки подтянется серверное состояние.
+    }
+
+    setParticipants(prev =>
+      prev.map(p => p.id === requestId ? { ...p, status: 'approved' } : p)
+    );
+    onParticipantCountChanged(1);
   };
 
   const approved = participants.filter(p => p.status === 'approved');
@@ -203,9 +241,11 @@ function ParticipantsPanel({ themeId, isOwner, onKick }: ParticipantsPanelProps)
                 {p.user.username && <div className="participant-sub">@{p.user.username}</div>}
               </div>
               {isOwner && (
-                <button className="participant-kick" onClick={() => setConfirm({ id: p.id, name: p.user.full_name ?? p.user.username ?? 'участника' })}>
-                  <FiUserMinus size={15} />
-                </button>
+                <div className="participant-actions">
+                  <button className="participant-kick" onClick={() => setConfirm({ id: p.id, name: p.user.full_name ?? p.user.username ?? 'участника' })} aria-label="Исключить участника">
+                    <FiUserMinus size={15} />
+                  </button>
+                </div>
               )}
             </div>
           ))}
@@ -222,9 +262,14 @@ function ParticipantsPanel({ themeId, isOwner, onKick }: ParticipantsPanelProps)
                 {p.user.username && <div className="participant-sub">@{p.user.username}</div>}
               </div>
               {isOwner && (
-                <button className="participant-kick" onClick={() => setConfirm({ id: p.id, name: p.user.full_name ?? p.user.username ?? 'участника' })}>
-                  <FiUserMinus size={15} />
-                </button>
+                <div className="participant-actions">
+                  <button className="participant-approve" onClick={() => handleApprove(p.id)} aria-label="Одобрить участника">
+                    <FiCheck size={16} />
+                  </button>
+                  <button className="participant-kick" onClick={() => setConfirm({ id: p.id, name: p.user.full_name ?? p.user.username ?? 'участника' })} aria-label="Отклонить заявку">
+                    <FiUserMinus size={15} />
+                  </button>
+                </div>
               )}
             </div>
           ))}
@@ -245,8 +290,9 @@ interface DetailModalProps {
   onClose: () => void;
   onThemeDeleted: (id: number) => void;
   onRequestChanged: (themeId: number, action: 'join' | 'cancel') => void;
+  onParticipantCountChanged: (themeId: number, delta: number) => void;
 }
-function DetailModal({ theme, myRequests, currentUserId, onClose, onThemeDeleted, onRequestChanged }: DetailModalProps) {
+function DetailModal({ theme, myRequests, currentUserId, onClose, onThemeDeleted, onRequestChanged, onParticipantCountChanged }: DetailModalProps) {
   if (!theme || !theme.creator) {
   console.error('DetailModal: theme.creator отсутствует', theme);
   return (
@@ -284,22 +330,20 @@ function DetailModal({ theme, myRequests, currentUserId, onClose, onThemeDeleted
     setLoading(true);
     try {
       if (action === 'join') {
-        await fetch(`${API_BASE}/themes/${theme.id}/requests/`, { method: 'POST', headers: authHeaders() });
+        await fetchJsonOrThrow(`${API_BASE}/themes/${theme.id}/requests/`, { method: 'POST', headers: authHeaders() });
         onRequestChanged(theme.id, 'join');
       } else if (action === 'cancel') {
         if (myReq) {
-          await fetch(`${API_BASE}/themes/${theme.id}/requests/${myReq.id}`, { method: 'DELETE', headers: authHeaders() });
+          await fetchJsonOrThrow(`${API_BASE}/themes/${theme.id}/requests/${myReq.id}`, { method: 'DELETE', headers: authHeaders() });
         }
         onRequestChanged(theme.id, 'cancel');
       } else {
-        await fetch(`${API_BASE}/themes/${theme.id}`, { method: 'DELETE', headers: authHeaders() });
+        await fetchJsonOrThrow(`${API_BASE}/themes/${theme.id}`, { method: 'DELETE', headers: authHeaders() });
         onThemeDeleted(theme.id);
         onClose();
       }
-    } catch {
-      if (action === 'join') onRequestChanged(theme.id, 'join');
-      else if (action === 'cancel') onRequestChanged(theme.id, 'cancel');
-      else { onThemeDeleted(theme.id); onClose(); }
+    } catch (e) {
+      console.error(e);
     } finally { setLoading(false); }
   };
 
@@ -396,7 +440,8 @@ function DetailModal({ theme, myRequests, currentUserId, onClose, onThemeDeleted
               <ParticipantsPanel
                 themeId={theme.id}
                 isOwner={isOwner}
-                onKick={(reqId, name) => {/* обновление локального счётчика если нужно */}}
+                onKick={() => {}}
+                onParticipantCountChanged={(delta) => onParticipantCountChanged(theme.id, delta)}
               />
             )}
           </div>
@@ -493,8 +538,9 @@ interface MyEventsModalProps {
   currentUserId: number | null;
   onThemeDeleted: (id: number) => void;
   onRequestChanged: (themeId: number, action: 'join' | 'cancel') => void;
+  onParticipantCountChanged: (themeId: number, delta: number) => void;
 }
-function MyEventsModal({ onClose, myThemes, myRequests, currentUserId, onThemeDeleted, onRequestChanged }: MyEventsModalProps) {
+function MyEventsModal({ onClose, myThemes, myRequests, currentUserId, onThemeDeleted, onRequestChanged, onParticipantCountChanged }: MyEventsModalProps) {
   const [tab, setTab] = useState<'created' | 'joined'>('created');
   const [selectedTheme, setSelectedTheme] = useState<Theme | null>(null);
 
@@ -511,6 +557,10 @@ function MyEventsModal({ onClose, myThemes, myRequests, currentUserId, onThemeDe
           onClose={() => setSelectedTheme(null)}
           onThemeDeleted={(id) => { onThemeDeleted(id); setSelectedTheme(null); }}
           onRequestChanged={onRequestChanged}
+          onParticipantCountChanged={(themeId, delta) => {
+            onParticipantCountChanged(themeId, delta);
+            setSelectedTheme(prev => prev && prev.id === themeId ? adjustThemeParticipantCount(prev, delta) : prev);
+          }}
         />
       )}
       <div className="modal-overlay" onClick={onClose}>
@@ -601,10 +651,10 @@ function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
     };
     setLoading(true); setError('');
     try {
-      const res = await fetch(`${API_BASE}/themes/themes`, { method: 'POST', headers: authHeaders(), body: JSON.stringify(payload) });
+      const res = await fetch(`${API_BASE}/themes/`, { method: 'POST', headers: authHeaders(), body: JSON.stringify(payload) });
       if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.detail ?? `Ошибка ${res.status}`); }
       const created: Theme = await res.json();
-      created.tags = form.tags; created.slots_available = created.max_slots; created.requests_count = 0;
+      created.tags = form.tags; created.slots_available = Math.max(created.max_slots - 1, 0); created.requests_count = 1; created.approved_count = 0;
       onCreated(created); onClose();
     } catch (e: any) {
       setError(e.message || 'Не удалось создать слот. Проверь, запущен ли бэкенд.');
@@ -714,14 +764,38 @@ function App() {
     } finally { setLoading(false); }
   }, []);
 
-  useEffect(() => { fetchThemes(); }, [fetchThemes]);
+  const fetchMyRequests = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_BASE}/themes/my/requests`, {
+        headers: authHeaders(),
+        signal: AbortSignal.timeout(5000),
+      });
+      if (!res.ok) throw new Error();
+      const data: MyRequest[] = await res.json();
+      setMyRequests(
+        data
+          .filter(r => r.status !== 'rejected')
+          .map(r => ({
+            ...r,
+            theme: { ...r.theme, tags: extractTags(r.theme.description) },
+          }))
+      );
+    } catch {
+      setMyRequests([]);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchThemes();
+    fetchMyRequests();
+  }, [fetchThemes, fetchMyRequests]);
 
   const handleRequestChanged = (themeId: number, action: 'join' | 'cancel') => {
-    setThemes(prev => prev.map(t => {
-      if (t.id !== themeId) return t;
-      const d = action === 'join' ? 1 : -1;
-      return { ...t, requests_count: (t.requests_count ?? 0) + d, slots_available: (t.slots_available ?? t.max_slots) - d };
-    }));
+    const canceledRequest = myRequests.find(r => r.theme.id === themeId);
+    const participantDelta = action === 'cancel' && canceledRequest?.status === 'approved' ? -1 : 0;
+    if (participantDelta !== 0) {
+      setThemes(prev => prev.map(t => t.id === themeId ? adjustThemeParticipantCount(t, participantDelta) : t));
+    }
     if (action === 'join') {
       const theme = themes.find(t => t.id === themeId);
       if (theme) setMyRequests(prev => [...prev, { id: Date.now(), status: 'pending', theme }]);
@@ -730,9 +804,13 @@ function App() {
     }
     setSelectedTheme(prev => {
       if (!prev || prev.id !== themeId) return prev;
-      const d = action === 'join' ? 1 : -1;
-      return { ...prev, requests_count: (prev.requests_count ?? 0) + d, slots_available: (prev.slots_available ?? prev.max_slots) - d };
+      return participantDelta !== 0 ? adjustThemeParticipantCount(prev, participantDelta) : prev;
     });
+  };
+
+  const handleParticipantCountChanged = (themeId: number, delta: number) => {
+    setThemes(prev => prev.map(t => t.id === themeId ? adjustThemeParticipantCount(t, delta) : t));
+    setSelectedTheme(prev => prev && prev.id === themeId ? adjustThemeParticipantCount(prev, delta) : prev);
   };
 
   const myThemes = themes.filter(t => currentUserId !== null && t.creator && t.creator.tg_id === currentUserId);
@@ -764,6 +842,7 @@ function App() {
           currentUserId={currentUserId}
           onThemeDeleted={id => setThemes(p => p.filter(t => t.id !== id))}
           onRequestChanged={handleRequestChanged}
+          onParticipantCountChanged={handleParticipantCountChanged}
         />
       )}
       {selectedTheme && (
@@ -773,6 +852,7 @@ function App() {
           onClose={() => setSelectedTheme(null)}
           onThemeDeleted={id => { setThemes(p => p.filter(t => t.id !== id)); setSelectedTheme(null); }}
           onRequestChanged={handleRequestChanged}
+          onParticipantCountChanged={handleParticipantCountChanged}
         />
       )}
 
@@ -782,7 +862,7 @@ function App() {
             <img src={PolyLogo} alt="logo" width={33} height={33} />
             <span className="app-title">PolyGang</span>
           </div>
-          <button className="events-top-button" onClick={() => setShowMyEvents(true)}>
+          <button className="events-top-button" onClick={() => { fetchMyRequests(); setShowMyEvents(true); }}>
             <FiCalendar size={22} />
           </button>
         </div>

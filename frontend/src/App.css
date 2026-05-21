@@ -572,12 +572,18 @@ body.body-filters-open { overflow: hidden; }
 .participant-info { flex: 1; min-width: 0; }
 .participant-name { font-size: 0.87rem; font-weight: 600; }
 .participant-sub  { font-size: 0.72rem; color: var(--tg-theme-hint-color, #888); }
+.participant-actions {
+  display: flex; align-items: center; gap: 6px; flex-shrink: 0;
+}
+.participant-approve,
 .participant-kick {
-  background: none; border: none; cursor: pointer; padding: 5px;
-  color: var(--tg-theme-destructive-color, #ff453a);
-  display: flex; align-items: center; flex-shrink: 0;
+  width: 30px; height: 30px; background: none; border: none; cursor: pointer; padding: 0;
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
   border-radius: 6px;
 }
+.participant-approve { color: #30d158; }
+.participant-approve:hover { background: rgba(48,209,88,0.1); }
+.participant-kick { color: var(--tg-theme-destructive-color, #ff453a); }
 .participant-kick:hover { background: rgba(255,69,58,0.1); }
 
 /* ─── Event card clickable ────────────────────────────────────────────────── */

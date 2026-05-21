@@ -52,7 +52,7 @@ from typing import List
 
 from app.core.db import get_db
 from app.models.user import User
-from app.schemas.request import RequestCreate, RequestPublic, RequestModerate
+from app.schemas.request import RequestCreate, RequestPublic, RequestModerate, RequestWithTheme
 from app.services import requests_service
 from app.api.dependencies.auth import get_current_user
 
@@ -288,16 +288,24 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.core.db import get_db
-from app.schemas.request import RequestCreate, RequestPublic, RequestModerate
+from app.schemas.request import RequestCreate, RequestPublic, RequestModerate, RequestWithTheme
 from app.services import requests_service
 
 from app.models.user import User
 
-from app.api.themes import get_current_user
+from app.api.dependencies.auth import get_current_user
 
 router = APIRouter(
     prefix="/api/v1/themes", tags=["requests"]
 )
+
+@router.get("/my/requests", response_model=list[RequestWithTheme], summary="Мои заявки по всем темам")
+async def get_my_requests(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return await requests_service.get_user_requests(db, current_user.id)
+
 
 @router.post("/{theme_id}/requests/", response_model=RequestPublic, status_code=201, summary="Создать заявку на тему")
 async def create_request(
@@ -337,4 +345,3 @@ async def get_requests(
     current_user: User = Depends(get_current_user),
 ):
     return await requests_service.get_requests_for_theme(db, theme_id, current_user)
-

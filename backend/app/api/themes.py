@@ -494,66 +494,54 @@ api/themes.py должен быть тонким CRUD-роутером,
 """
 
 
-from fastapi import APIRouter
-from sqlalchemy import select
-from ..models.theme import Theme
+from fastapi import APIRouter, Depends, status
 from ..models.user import User
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
-from ..core.db import AsyncSessionLocal, get_db
-from ..schemas.theme import ThemeCreate
-from ..services.themes_service import create_theme, get_theme, get_themes, delete_theme
-from app.api.users import get_me
-from fastapi import Depends
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.api.dependencies.auth import get_current_user
+
+from ..core.db import get_db
+from ..schemas.theme import ThemeCreate, ThemePublic
+from ..services.themes_service import (
+    create_theme as create_theme_service,
+    delete_theme as delete_theme_service,
+    get_theme as get_theme_service,
+    get_themes as get_themes_service,
+)
 
 router = APIRouter(prefix="/api/v1/themes", tags=["themes"])
 
-#получение текущего пользователя (пока что заглушка)
-async def get_current_user(db: AsyncSession = Depends(get_db)) -> User:
-    result = await db.execute(
-        select(User).where(User.tg_id == 12377331)
-    )
-    user = result.scalar_one_or_none()
+@router.get("/", response_model=list[ThemePublic], summary="Получить список всех тем")
+async def get_all_themes(db: AsyncSession = Depends(get_db)):
+    return await get_themes_service(db)
 
-    if user is None:
-        user = User(
-            tg_id=12377331,
-            username="test",
-            full_name="test",
-            is_banned=False,
-            is_admin=True
-        )
-        db.add(user)
-        await db.commit()
-        await db.refresh(user)
 
-    return user
+@router.post(
+    "/themes",
+    response_model=ThemePublic,
+    status_code=status.HTTP_201_CREATED,
+    include_in_schema=False,
+)
+@router.post("/", response_model=ThemePublic, status_code=status.HTTP_201_CREATED, summary="Опубликовать тему")
+async def create_theme_api(
+    theme_to_create: ThemeCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return await create_theme_service(db, current_user, theme_to_create)
 
-@router.get("/", summary="Получить список всех тем")
-async def get_all_themes():
-  async with AsyncSessionLocal() as session:
-    result = await get_themes(session)
 
-    return result
+@router.delete("/themes/{theme_id}", include_in_schema=False)
+@router.delete("/{theme_id}", summary="Удалить тему")
+async def delete_theme_api(
+    theme_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    await delete_theme_service(db, theme_id, current_user)
+    return {"detail": "deleted"}
 
-@router.get("/{id}", summary = "Получить детали темы по id")
-async def get_theme_data(theme_id: int):
-  async with AsyncSessionLocal() as session:
-    result = await get_theme(session, theme_id)
 
-  return result
-
-@router.post("/themes", summary = "Опубликовать тему")
-async def create_theme_api(themeToCreate: ThemeCreate):
-  async with AsyncSessionLocal() as session:
-    user = await get_current_user(session)
-    result = await create_theme(session, user, themeToCreate)
-
-  return result
-
-@router.delete("/themes/{id}", summary = "Удалить тему")
-async def delete_theme_api(theme_id: int):
-  async with AsyncSessionLocal() as session:
-    user = await get_current_user(session)
-    await delete_theme(session, theme_id, user)
-
-  return "deleted"
+@router.get("/{theme_id}", response_model=ThemePublic, summary="Получить детали темы по id")
+async def get_theme_data(theme_id: int, db: AsyncSession = Depends(get_db)):
+    return await get_theme_service(db, theme_id)
