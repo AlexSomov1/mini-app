@@ -565,13 +565,49 @@ tests проверяют бизнес-правила.
 
 
 from fastapi import APIRouter, HTTPException
-from sqlalchemy import select
+from sqlalchemy import case, delete, func, select
+from sqlalchemy.orm import selectinload
 from datetime import datetime, timezone
 from ..models.theme import Theme
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from ..core.db import AsyncSessionLocal
 from ..schemas.theme import ThemeCreate
 from ..models.user import User
+from ..models.request import Request
+from ..schemas.request import RequestStatus
+
+
+async def _attach_theme_stats(db: AsyncSession, themes: list[Theme]) -> list[Theme]:
+    theme_ids = [theme.id for theme in themes]
+    if not theme_ids:
+        return themes
+
+    stats_query = (
+        select(
+            Request.theme_id,
+            func.count(
+                case((Request.status != RequestStatus.rejected, 1))
+            ).label("requests_count"),
+            func.count(
+                case((Request.status == RequestStatus.approved, 1))
+            ).label("approved_count"),
+        )
+        .where(Request.theme_id.in_(theme_ids))
+        .group_by(Request.theme_id)
+    )
+    stats = {
+        theme_id: (requests_count, approved_count)
+        for theme_id, requests_count, approved_count in (await db.execute(stats_query)).all()
+    }
+
+    for theme in themes:
+        _active_requests_count, approved_count = stats.get(theme.id, (0, 0))
+        participants_count = 1 + approved_count
+        theme.requests_count = participants_count
+        theme.approved_count = approved_count
+        theme.slots_available = max(theme.max_slots - participants_count, 0)
+
+    return themes
 
 async def create_theme(db: AsyncSession, creator: User, theme_: ThemeCreate) -> Theme:
     if creator.is_banned:
@@ -586,12 +622,15 @@ async def create_theme(db: AsyncSession, creator: User, theme_: ThemeCreate) -> 
     db.add(theme)
     await db.commit()
 
-    return theme
+    query = select(Theme).where(Theme.id == theme.id).options(selectinload(Theme.creator))
+    result = await db.execute(query)
+    themes = await _attach_theme_stats(db, [result.scalar_one()])
+    return themes[0]
 
 async def get_themes(db: AsyncSession) -> list:
     limit = 10
 
-    query = select(Theme)
+    query = select(Theme).options(selectinload(Theme.creator))
     query = query.where(Theme.datetime > datetime.now())
 
     query = query.order_by(Theme.datetime).limit(limit)
@@ -599,17 +638,18 @@ async def get_themes(db: AsyncSession) -> list:
     result = await db.execute(query)
     themes = result.scalars().all()
 
-    return themes
+    return await _attach_theme_stats(db, list(themes))
 
 async def get_theme(db: AsyncSession, theme_id: int) -> Theme:
-    query = select(Theme).where(Theme.id == theme_id)
+    query = select(Theme).where(Theme.id == theme_id).options(selectinload(Theme.creator))
     result = await db.execute(query)
     exactTheme = result.scalar_one_or_none()
 
     if exactTheme is None:
         raise HTTPException(status_code=404, detail="Тема не найдена")
 
-    return exactTheme
+    themes = await _attach_theme_stats(db, [exactTheme])
+    return themes[0]
 
 
 async def delete_theme(db: AsyncSession, theme_id: int, current_user: User):
@@ -623,6 +663,7 @@ async def delete_theme(db: AsyncSession, theme_id: int, current_user: User):
     if exactTheme.creator_id != current_user.id: # and not current_user.is_admin:
         raise HTTPException(status_code=403, detail="У вас нет прав на удаление этой темы")
 
+    await db.execute(delete(Request).where(Request.theme_id == theme_id))
     await db.delete(exactTheme)
     await db.commit()
 
