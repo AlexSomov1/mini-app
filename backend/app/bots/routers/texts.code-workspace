@@ -1,0 +1,22 @@
+{
+	"folders": [
+		{
+			"path": "../texts"
+		},
+		{
+			"path": "../utils"
+		},
+		{
+			"path": "../states"
+		},
+		{
+			"path": "../services"
+		},
+		{
+			"path": "../keyboards"
+		},
+		{
+			"path": "."
+		}
+	]
+}
